@@ -1,4 +1,4 @@
-name: StreamX Media3 Pro - APK Build Suite
+name: StreamX Media3 Pro - Release APK Build
 
 on:
   workflow_dispatch:
@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: streamx-apk-build-${{ github.ref }}
+  group: streamx-release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -88,7 +88,7 @@ jobs:
           yes | "${SDKMANAGER}" --sdk_root="${SDK_ROOT}" --licenses >/dev/null || true
           "${SDKMANAGER}" --sdk_root="${SDK_ROOT}" --install "platform-tools" "platforms;android-36" "build-tools;36.0.0"
 
-      - name: Force Gradle 8.4 and fix drawables
+      - name: Fix wrapper compatibility and color attributes
         shell: bash
         run: |
           set -euo pipefail
@@ -96,12 +96,12 @@ jobs:
           find app/src/main/res/drawable -type f -name "*.xml" -exec sed -i 's/android:color="#668FFFFF"/android:color="#66888888"/g' {} + || true
           find app/src/main/res/drawable -type f -name "*.xml" -exec sed -i 's/android:color="#668F/android:color="#6688/g' {} + || true
 
-          # Completely rewrite gradle-wrapper.properties to use stable Gradle 8.4
+          # Force stable Gradle 8.7 wrapper to avoid Gradle 9 / InternalProblems crash
           mkdir -p gradle/wrapper
           cat << 'EOF' > gradle/wrapper/gradle-wrapper.properties
           distributionBase=GRADLE_USER_HOME
           distributionPath=wrapper/dists
-          distributionUrl=https\://services.gradle.org/distributions/gradle-8.4-bin.zip
+          distributionUrl=https\://services.gradle.org/distributions/gradle-8.7-bin.zip
           networkTimeout=10000
           validateDistributionUrl=true
           zipStoreBase=GRADLE_USER_HOME
@@ -132,38 +132,26 @@ jobs:
             echo "::notice::No persistent signing secrets configured; Gradle will use its debug signing key."
           fi
 
-      - name: Build Debug and Release APKs
+      - name: Build Release APK
         shell: bash
         run: |
           set -euo pipefail
           chmod +x gradlew || true
-          # Run gradle directly with 8.4 wrapper to bypass any system gradle 9 mismatch
-          ./gradlew wrapper --gradle-version 8.4 --distribution-type bin || true
-          ./gradlew --no-daemon assembleDebug assembleRelease --stacktrace
+          ./gradlew --no-daemon clean assembleRelease --stacktrace
 
-          mkdir -p apk_output_suite
-          
-          # Locate Debug APK
-          DEBUG_APK="$(find app/build/outputs/apk/debug -maxdepth 2 -type f -name '*.apk' -print -quit)"
-          if [[ -n "${DEBUG_APK}" ]]; then
-            cp "${DEBUG_APK}" apk_output_suite/StreamX-Media3-Pro-Debug.apk
-          fi
-
-          # Locate Release APK
+          mkdir -p release_out
           RELEASE_APK="$(find app/build/outputs/apk/release -maxdepth 2 -type f -name '*.apk' ! -name '*-unsigned.apk' -print -quit)"
           if [[ -z "${RELEASE_APK}" ]]; then
             RELEASE_APK="app/build/outputs/apk/release/app-release.apk"
           fi
-          if [[ -f "${RELEASE_APK}" ]]; then
-            cp "${RELEASE_APK}" apk_output_suite/StreamX-Media3-Pro-Release.apk
-          fi
+          test -s "${RELEASE_APK}"
+          cp "${RELEASE_APK}" release_out/StreamX-Media3-Pro-Release.apk
+          ls -lh release_out/
 
-          ls -lh apk_output_suite/
-
-      - name: Upload Debug and Release APKs
+      - name: Upload Release APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: StreamX-Media3-Pro-Debug-and-Release-APKs
-          path: apk_output_suite/
+          name: StreamX-Media3-Pro-Release-APK
+          path: release_out/StreamX-Media3-Pro-Release.apk
           if-no-files-found: error
           retention-days: 14
