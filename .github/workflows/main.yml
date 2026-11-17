@@ -88,17 +88,28 @@ jobs:
           yes | "${SDKMANAGER}" --sdk_root="${SDK_ROOT}" --licenses >/dev/null || true
           "${SDKMANAGER}" --sdk_root="${SDK_ROOT}" --install "platform-tools" "platforms;android-36" "build-tools;36.0.0"
 
-      - name: Set up Gradle 8.5
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.5'
-
-      - name: Fix color attributes in drawables
+      - name: Fix wrapper compatibility and color attributes
         shell: bash
         run: |
           set -euo pipefail
+          # Fix drawable colors
           find app/src/main/res/drawable -type f -name "*.xml" -exec sed -i 's/android:color="#668FFFFF"/android:color="#66888888"/g' {} + || true
           find app/src/main/res/drawable -type f -name "*.xml" -exec sed -i 's/android:color="#668F/android:color="#6688/g' {} + || true
+
+          # Force update gradle-wrapper.properties to use compatible Gradle 8.5 distribution
+          WRAPPER_PROP="gradle/wrapper/gradle-wrapper.properties"
+          if [[ -f "${WRAPPER_PROP}" ]]; then
+            echo "Updating ${WRAPPER_PROP} to Gradle 8.5..."
+            cat << 'EOF' > "${WRAPPER_PROP}"
+          distributionBase=GRADLE_USER_HOME
+          distributionPath=wrapper/dists
+          distributionUrl=https\://services.gradle.org/distributions/gradle-8.5-bin.zip
+          networkTimeout=10000
+          validateDistributionUrl=true
+          zipStoreBase=GRADLE_USER_HOME
+          zipStorePath=wrapper/dists
+          EOF
+          fi
 
       - name: Configure optional persistent APK signing key
         shell: bash
@@ -129,7 +140,7 @@ jobs:
         run: |
           set -euo pipefail
           chmod +x gradlew || true
-          ./gradlew --no-daemon assembleDebug assembleRelease --stacktrace || gradle --no-daemon assembleDebug assembleRelease --stacktrace
+          ./gradlew --no-daemon assembleDebug assembleRelease --stacktrace
 
           mkdir -p apk_output_suite
           
@@ -137,7 +148,6 @@ jobs:
           DEBUG_APK="$(find app/build/outputs/apk/debug -maxdepth 2 -type f -name '*.apk' -print -quit)"
           if [[ -n "${DEBUG_APK}" ]]; then
             cp "${DEBUG_APK}" apk_output_suite/StreamX-Media3-Pro-Debug.apk
-            echo "Found and copied Debug APK."
           fi
 
           # Locate Release APK
@@ -147,7 +157,6 @@ jobs:
           fi
           if [[ -f "${RELEASE_APK}" ]]; then
             cp "${RELEASE_APK}" apk_output_suite/StreamX-Media3-Pro-Release.apk
-            echo "Found and copied Release APK."
           fi
 
           ls -lh apk_output_suite/
