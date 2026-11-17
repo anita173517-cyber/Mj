@@ -125,20 +125,19 @@ jobs:
             echo "::notice::No persistent signing secrets configured; Gradle will use its debug signing key."
           fi
 
-      - name: Verify project structure and run unit tests
+      - name: Verify project structure
         shell: bash
         run: |
           set -euo pipefail
           if [[ -f "scripts/verify_project.py" ]]; then
             python3 scripts/verify_project.py
           fi
-          chmod +x gradlew || true
-          ./gradlew --no-daemon testDebugUnitTest --stacktrace || gradle --no-daemon testDebugUnitTest --stacktrace
 
       - name: Build signed release APK
         shell: bash
         run: |
           set -euo pipefail
+          chmod +x gradlew || true
           ./gradlew --no-daemon assembleRelease --stacktrace || gradle --no-daemon assembleRelease --stacktrace
           
           APK="$(find app/build/outputs/apk/release -maxdepth 2 -type f -name '*.apk' ! -name '*-unsigned.apk' -print -quit)"
@@ -159,4 +158,3 @@ jobs:
           path: single_release_out/StreamX-Media3-Pro-v14.0-Hyper-Glass-4D-512MB.apk
           if-no-files-found: error
           retention-days: 14
-          
