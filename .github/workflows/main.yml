@@ -1,4 +1,4 @@
-name: StreamX Media3 Pro - Single Release APK
+name: StreamX Media3 Pro - APK Build Suite
 
 on:
   workflow_dispatch:
@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: streamx-release-${{ github.ref }}
+  group: streamx-apk-build-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -88,7 +88,12 @@ jobs:
           yes | "${SDKMANAGER}" --sdk_root="${SDK_ROOT}" --licenses >/dev/null || true
           "${SDKMANAGER}" --sdk_root="${SDK_ROOT}" --install "platform-tools" "platforms;android-36" "build-tools;36.0.0"
 
-      - name: Fix color attributes and prepare project
+      - name: Set up Gradle 8.5
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.5'
+
+      - name: Fix color attributes in drawables
         shell: bash
         run: |
           set -euo pipefail
@@ -119,28 +124,38 @@ jobs:
             echo "::notice::No persistent signing secrets configured; Gradle will use its debug signing key."
           fi
 
-      - name: Build signed release APK
+      - name: Build Debug and Release APKs
         shell: bash
         run: |
           set -euo pipefail
           chmod +x gradlew || true
-          ./gradlew --no-daemon assembleRelease --stacktrace || gradle --no-daemon assembleRelease --stacktrace
-          
-          APK="$(find app/build/outputs/apk/release -maxdepth 2 -type f -name '*.apk' ! -name '*-unsigned.apk' -print -quit)"
-          if [[ -z "${APK}" ]]; then
-            APK="app/build/outputs/apk/release/app-release.apk"
-          fi
-          test -s "${APK}"
-          unzip -t "${APK}" >/dev/null
-          mkdir -p single_release_out
-          cp "${APK}" single_release_out/StreamX-Media3-Pro-v14.0-Hyper-Glass-4D-512MB.apk
-          sha256sum single_release_out/StreamX-Media3-Pro-v14.0-Hyper-Glass-4D-512MB.apk
-          ls -lh single_release_out/
+          ./gradlew --no-daemon assembleDebug assembleRelease --stacktrace || gradle --no-daemon assembleDebug assembleRelease --stacktrace
 
-      - name: Upload single release APK
+          mkdir -p apk_output_suite
+          
+          # Locate Debug APK
+          DEBUG_APK="$(find app/build/outputs/apk/debug -maxdepth 2 -type f -name '*.apk' -print -quit)"
+          if [[ -n "${DEBUG_APK}" ]]; then
+            cp "${DEBUG_APK}" apk_output_suite/StreamX-Media3-Pro-Debug.apk
+            echo "Found and copied Debug APK."
+          fi
+
+          # Locate Release APK
+          RELEASE_APK="$(find app/build/outputs/apk/release -maxdepth 2 -type f -name '*.apk' ! -name '*-unsigned.apk' -print -quit)"
+          if [[ -z "${RELEASE_APK}" ]]; then
+            RELEASE_APK="app/build/outputs/apk/release/app-release.apk"
+          fi
+          if [[ -f "${RELEASE_APK}" ]]; then
+            cp "${RELEASE_APK}" apk_output_suite/StreamX-Media3-Pro-Release.apk
+            echo "Found and copied Release APK."
+          fi
+
+          ls -lh apk_output_suite/
+
+      - name: Upload Debug and Release APKs
         uses: actions/upload-artifact@v4
         with:
-          name: StreamX-Media3-Pro-v14.0-Hyper-Glass-4D-Release
-          path: single_release_out/StreamX-Media3-Pro-v14.0-Hyper-Glass-4D-512MB.apk
+          name: StreamX-Media3-Pro-Debug-and-Release-APKs
+          path: apk_output_suite/
           if-no-files-found: error
           retention-days: 14
