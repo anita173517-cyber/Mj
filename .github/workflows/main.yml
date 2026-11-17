@@ -88,7 +88,7 @@ jobs:
           yes | "${SDKMANAGER}" --sdk_root="${SDK_ROOT}" --licenses >/dev/null || true
           "${SDKMANAGER}" --sdk_root="${SDK_ROOT}" --install "platform-tools" "platforms;android-36" "build-tools;36.0.0"
 
-      - name: Fix wrapper compatibility and color attributes
+      - name: Force Gradle 8.4 and fix drawables
         shell: bash
         run: |
           set -euo pipefail
@@ -96,20 +96,17 @@ jobs:
           find app/src/main/res/drawable -type f -name "*.xml" -exec sed -i 's/android:color="#668FFFFF"/android:color="#66888888"/g' {} + || true
           find app/src/main/res/drawable -type f -name "*.xml" -exec sed -i 's/android:color="#668F/android:color="#6688/g' {} + || true
 
-          # Force update gradle-wrapper.properties to use compatible Gradle 8.5 distribution
-          WRAPPER_PROP="gradle/wrapper/gradle-wrapper.properties"
-          if [[ -f "${WRAPPER_PROP}" ]]; then
-            echo "Updating ${WRAPPER_PROP} to Gradle 8.5..."
-            cat << 'EOF' > "${WRAPPER_PROP}"
+          # Completely rewrite gradle-wrapper.properties to use stable Gradle 8.4
+          mkdir -p gradle/wrapper
+          cat << 'EOF' > gradle/wrapper/gradle-wrapper.properties
           distributionBase=GRADLE_USER_HOME
           distributionPath=wrapper/dists
-          distributionUrl=https\://services.gradle.org/distributions/gradle-8.5-bin.zip
+          distributionUrl=https\://services.gradle.org/distributions/gradle-8.4-bin.zip
           networkTimeout=10000
           validateDistributionUrl=true
           zipStoreBase=GRADLE_USER_HOME
           zipStorePath=wrapper/dists
           EOF
-          fi
 
       - name: Configure optional persistent APK signing key
         shell: bash
@@ -140,6 +137,8 @@ jobs:
         run: |
           set -euo pipefail
           chmod +x gradlew || true
+          # Run gradle directly with 8.4 wrapper to bypass any system gradle 9 mismatch
+          ./gradlew wrapper --gradle-version 8.4 --distribution-type bin || true
           ./gradlew --no-daemon assembleDebug assembleRelease --stacktrace
 
           mkdir -p apk_output_suite
