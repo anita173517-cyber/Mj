@@ -93,13 +93,18 @@ jobs:
         with:
           gradle-version: '8.13'
 
-      - name: Fix incompatible drawable color attributes automatically
+      - name: Fix incompatible drawable color attributes and loosen Kotlin compiler warnings
         shell: bash
         run: |
           set -euo pipefail
           echo "Cleaning up incompatible color attributes in drawables..."
           find app/src/main/res/drawable -type f -name "*.xml" -exec sed -i 's/android:color="#668FFFFF"/android:color="#66888888"/g' {} + || true
           find app/src/main/res/drawable -type f -name "*.xml" -exec sed -i 's/android:color="#668F/android:color="#6688/g' {} + || true
+
+          if [[ -f "app/build.gradle.kts" ]]; then
+            echo "Injecting kotlinOptions suppression into app/build.gradle.kts..."
+            sed -i '/kotlinOptions {/a \        freeCompilerArgs = listOf("-Xjvm-default=all", "-Xsuppress-version-warnings")' app/build.gradle.kts || true
+          fi
 
       - name: Configure optional persistent APK signing key
         shell: bash
